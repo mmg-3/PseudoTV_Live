@@ -40,6 +40,7 @@ class Resources:
         else:
             self.jsonRPC  = jsonRPC
             
+        self.pool     = self.jsonRPC.pool
         self.logoSets = self.buildLogoResources()
         
         
@@ -177,11 +178,11 @@ class Resources:
         log('getLogo: name = %s, type = %s'%(name,type))
         
         #local
-        local = (PoolHelper().poolList(self.chkLocalLogo,self.getFilePatterns(name)))
+        local = (self.pool.poolList(self.chkLocalLogo,self.getFilePatterns(name)))
         if local: return self.cleanLogoPath(local[0])
         
         #resources
-        rlogo = (PoolHelper().poolList(self.findResourceLogo,self.logoSets,(name,type)))
+        rlogo = (self.pool.poolList(self.findResourceLogo,self.logoSets,(name,type)))
         if rlogo: return self.cleanLogoPath(rlogo[0])
         
         if item is not None:
@@ -223,7 +224,7 @@ class Resources:
         return logo
             
 
-    @use_cache(7)
+    @cacheit()
     def monoConvert(self, logo, dest, useColor=bool(getSettingInt('Color_Logos'))):
         return logo
         # self.log('monoConvert, logo = %s, dest = %s'%(logo,dest)) #detect if logo is color and if preference is mono, covert to mono.

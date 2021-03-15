@@ -78,10 +78,10 @@ class Plugin:
         files = {LANGUAGE(30172):M3UFLE,LANGUAGE(30173):XMLTVFLE,LANGUAGE(30009):CHANNELFLE,LANGUAGE(30130):SETTINGS_FLE,LANGUAGE(30179):LIBRARYFLE}
         keys  = [LANGUAGE(30172),LANGUAGE(30173),LANGUAGE(30009),LANGUAGE(30130),LANGUAGE(30179)]
         if not full: keys = keys[:3]
-        if yesnoDialog('%s ?'%(msg)): [notificationDialog(LANGUAGE(30016)%(key)) for key in keys if FileAccess.delete(files[key])]
+        if Dialog().yesnoDialog('%s ?'%(msg)): [Dialog().notificationDialog(LANGUAGE(30016)%(key)) for key in keys if FileAccess.delete(files[key])]
         setPropertyBool('pendingChange',True)
         setPropertyBool('autotuned',False)
-        if full: return okDialog(LANGUAGE(30183))
+        if full: return Dialog().okDialog(LANGUAGE(30183))
         setBusy(False)
         return True
 
@@ -155,7 +155,7 @@ class Plugin:
             if isPlaylistRandom(): self.playlist.unshuffle()
             return self.myPlayer.play(self.playlist, startpos=stpos)
 
-        notificationDialog(LANGUAGE(30001))
+        Dialog().notificationDialog(LANGUAGE(30001))
         return xbmcplugin.setResolvedUrl(int(self.sysARG[1]), False, xbmcgui.ListItem())
         
         
@@ -186,7 +186,7 @@ class Plugin:
                 self.log('playRadio, Playlist size = %s'%(self.playlist.size()))
                 return self.myPlayer.play(self.playlist)
 
-        notificationDialog(LANGUAGE(30001))
+        Dialog().notificationDialog(LANGUAGE(30001))
         return xbmcplugin.setResolvedUrl(int(self.sysARG[1]), False, xbmcgui.ListItem())
 
         
@@ -265,7 +265,7 @@ class Plugin:
                 # self.playlist.add(path,lz,idx)
             # self.log('playChannel, set callback stack with paths = %s'%(paths))
             
-        else: notificationDialog(LANGUAGE(30001))
+        else: Dialog().notificationDialog(LANGUAGE(30001))
         xbmcplugin.setResolvedUrl(int(self.sysARG[1]), found, listitems[0])
 
 

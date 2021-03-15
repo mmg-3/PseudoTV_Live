@@ -215,8 +215,6 @@ class Player(xbmc.Player):
 class Monitor(xbmc.Monitor):
     def __init__(self):
         xbmc.Monitor.__init__(self)
-        self.pendingChange  = False
-        self.lastUserM3U    = getSetting('Import_M3U')
         self.onChangeThread = threading.Timer(0.5, self.onChange)
         
         
@@ -224,22 +222,9 @@ class Monitor(xbmc.Monitor):
         return log('%s: %s'%(self.__class__.__name__,msg),level)
 
 
-    def chkPendingChange(self):
-        if   xbmcgui.getCurrentWindowDialogId() in [10140,12000,10126]: return True
-        elif getSetting('Import_M3U') != self.lastUserM3U:
-            self.lastUserM3U = getSetting('Import_M3U')
-            return True #todo check other settings for change
+    def chkSettingsDialog(self):
+        if xbmcgui.getCurrentWindowDialogId() in [10140,12000,10126]: return True
         return False
-
-
-    def isPendingChange(self):
-        return (self.pendingChange | getPropertyBool('pendingChange'))
-    
-    
-    def setPendingChange(self, state):
-        self.log('setPendingChange, state = %s'%(state))
-        self.pendingChange = state
-        setPropertyBool('pendingChange',state)
 
 
     def onNotification(self, sender, method, data):
@@ -248,21 +233,25 @@ class Monitor(xbmc.Monitor):
             
     def onSettingsChanged(self):
         setPropertyBool('isPlaylist',bool(getSettingInt('Playback_Method')))
-        if not self.isPendingChange(): return
+        if not isPendingChange(): return
         self.log('onSettingsChanged')
-        if self.onChangeThread.is_alive(): 
-            self.onChangeThread.cancel()
+        if self.onChangeThread.is_alive(): self.onChangeThread.cancel()
         self.onChangeThread = threading.Timer((float((UPDATE_OFFSET//4)/60)), self.onChange)
         self.onChangeThread.name = "onChangeThread"
         self.onChangeThread.start()
         
         
+    def chkSettings(self):
+        # chk for setting value changes, setPendingChange if  True
+        return True
+        
+        
     def onChange(self):
-        if not self.isPendingChange(): return # last chance to cancel.
-        elif isBusy(): return self.onSettingsChanged() # delay restart, still pending change.
+        if isBusy(): return self.onSettingsChanged() # delay restart, changes still occurring.
+        elif not isPendingChange() and not self.chkSettings(): return #ignore system changes/nothing changed
         self.log('onChange')
         self.myService.chkUpdate('0')
-        self.setPendingChange(False)
+        setPendingChange(False)
 
 
 class Service:
@@ -330,10 +319,8 @@ class Service:
         
                 
     def chkIdle(self):
-        if getIdleTime() > OVERLAY_DELAY: #15sec. overlay delay...
-            self.myPlayer.toggleOverlay(True)
-        else:
-            self.myPlayer.toggleOverlay(False)
+        if getIdleTime() > OVERLAY_DELAY: self.myPlayer.toggleOverlay(True)
+        else: self.myPlayer.toggleOverlay(False)
  
 
     def chkInfo(self):
@@ -350,7 +337,7 @@ class Service:
             if lastUpdate is None: 
                 lastUpdate = (getProperty('Last_Update') or '0')
                 
-            conditions = [self.myMonitor.isPendingChange(),
+            conditions = [isPendingChange(),
                           not FileAccess.exists(M3UFLE),
                           not FileAccess.exists(XMLTVFLE),
                           (time.time() > (float(lastUpdate or '0') + UPDATE_OFFSET))]
@@ -374,28 +361,36 @@ class Service:
             setProperty('Last_Update',str(time.time()))
             return brutePVR(override=True)
         return False
-                 
+             
+             
+    def initialize(self):
+        self.log('initialize')
+        initThreads = [self.startInitThread, self.startServiceThread]
+        dirs = [CACHE_LOC,LOGO_LOC,PLS_LOC,LOCK_LOC]
+        [FileAccess.makedirs(dir) for dir in dirs if not FileAccess.exists(dir)]
+        for initThread in initThreads: initThread()
+        return True
+                
          
     def run(self, silent=False):
         self.log('run')
         setBusy(False)
-        if notificationProgress('%s...'%(LANGUAGE(30052))): initDirs()
-        for initThread in [self.startInitThread, self.startServiceThread]: initThread()
+        Dialog().notificationProgress('%s...'%(LANGUAGE(30052)))
+        self.initialize()
         self.myMonitor.waitForAbort(15)#ensure threads are active before main service starts. cheaper then another while loop.
         while not self.myMonitor.abortRequested():
             if   self.chkInfo(): continue # aggressive polling required!
             elif self.myMonitor.waitForAbort(2): break
-            self.chkIdle()
+            self.chkIdle() #15sec. overlay delay...
             
-            if self.myMonitor.chkPendingChange(): # detect settings change. 
-                self.myMonitor.setPendingChange(True)
+            if self.myMonitor.chkSettingsDialog(): # detect settings dialog. 
+                setPendingChange(True)
                 continue
-            elif isBusy() or self.myMonitor.isPendingChange():
+            elif isBusy() or isPendingChange():
                 continue
                 
             self.chkRecommended()
             self.chkUpdate()
-            
         self.closeThreads()
                 
                 

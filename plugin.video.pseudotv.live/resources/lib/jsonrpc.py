@@ -18,7 +18,7 @@
 # -*- coding: utf-8 -*-
 
 from resources.lib.globals     import *
-from resources.lib.worker      import BaseWorker
+from resources.lib.concurrency import BaseWorker
 from resources.lib.resources   import Resources
 from resources.lib.videoparser import VideoParser
 
@@ -33,7 +33,7 @@ class JSONRPC:
     def __init__(self, cache=None, builder=None):
         self.log('__init__')
         if cache is None:
-            self.cache = SimpleCache()
+            self.cache = Cache()
         else: 
             self.cache = cache
             
@@ -43,10 +43,11 @@ class JSONRPC:
         
         if builder is None:
             from resources.lib.parser import Writer
-            self.writer    = Writer(self.cache)
+            self.writer    = Writer(cache=self.cache)
         else:
             self.writer    = builder.writer
-        
+            
+        self.pool          = self.writer.pool
         self.videoParser   = VideoParser()
         self.resources     = Resources(self.cache, self)
         self.processThread = threading.Timer(15.0, self.myProcess.start)
@@ -70,19 +71,19 @@ class JSONRPC:
         return self.resources.getLogo(name,type,path,item,featured)
         
         
-    @use_cache(1)
+    @cacheit()
     def getPluginMeta(self, plugin):
         return getPluginMeta(plugin)
 
 
-    @use_cache(getSettingInt('Max_Days'))
+    @cacheit()
     def getListDirectory(self, path, version=ADDON_VERSION):
         self.log('getListDirectory path = %s, version = %s'%(path,version))
         try:    return FileAccess.listdir(path)
         except: return [],[]
 
 
-    @use_cache(getSettingInt('Max_Days'))
+    @cacheit()
     def listVFS(self, path, media='video', force=False, version=ADDON_VERSION):
         self.log('listVFS path = %s, version = %s'%(path,version))
         json_response = self.getDirectory('{"directory":"%s","media":"%s","properties":["duration","runtime"]}'%(path,media),cache=False).get('result',{}).get('files',[])
@@ -97,7 +98,7 @@ class JSONRPC:
         return files
 
 
-    @use_cache(getSettingInt('Max_Days')) # check for duration data.
+    @cacheit() # check for duration data.
     def playableVFS(self, path, media='video', chkSeek=False):
         self.log('playableVFS, path = %s, media = %s'%(path,media))
         dirs  = []
@@ -119,9 +120,10 @@ class JSONRPC:
         cacheName = '%s.cacheJSON.%s'%(ADDON_ID,command)
         cacheResponse = self.cache.get(cacheName)
         if not cacheResponse:
-            cacheResponse = dumpJSON(sendJSON(command))
-            self.cache.set(cacheName, cacheResponse, checksum=len(cacheResponse), expiration=life)
-        return loadJSON(cacheResponse)
+            cacheResponse = sendJSON(command)
+            if 'result' in cacheResponse:
+                return self.cache.set(cacheName, cacheResponse, life)
+        return cacheResponse
         
         
     def getActivePlayer(self, return_item=False):
@@ -209,7 +211,7 @@ class JSONRPC:
     def chkSeeking(self, file, dur):
         if not file.startswith(('plugin://','upnp://')): return True
         #todo test seek for support disable via adv. rule if fails.
-        notificationDialog(LANGUAGE(30142))
+        Dialog().notificationDialog(LANGUAGE(30142))
         liz = xbmcgui.ListItem('Seek Test',path=file)
         playpast = False
         progress = int(dur/2)
@@ -233,7 +235,7 @@ class JSONRPC:
             self.myPlayer.stop()
         msg = LANGUAGE(30143) if playpast else LANGUAGE(30144)
         self.log('chkSeeking file = %s %s'%(file,msg))
-        notificationDialog(msg)
+        Dialog().notificationDialog(msg)
         return playpast
 
         
@@ -312,7 +314,7 @@ class JSONRPC:
         if not duration:
             try:
                 duration = self.videoParser.getVideoLength(path.replace("\\\\", "\\"),item)
-                self.cache.set(cacheName, duration, checksum=duration, expiration=datetime.timedelta(days=getSettingInt('Max_Days')))
+                self.cache.set(cacheName, duration, life=datetime.timedelta(days=getSettingInt('Max_Days')))
             except Exception as e: 
                 log("parseDuration, Failed! " + str(e), xbmc.LOGERROR)
                 duration = 0

@@ -28,7 +28,7 @@ class Library:
     def __init__(self, cache=None, jsonRPC=None):
         log('Library: __init__')
         if cache is None:
-            self.cache = SimpleCache()
+            self.cache = Cache()
         else: 
             self.cache = cache
         
@@ -37,6 +37,8 @@ class Library:
             self.jsonRPC  = JSONRPC(self.cache)
         else:
             self.jsonRPC  = jsonRPC
+            
+        self.pool         = self.jsonRPC.pool
         self.myMonitor    = self.jsonRPC.myMonitor
         
         self.predefined   = Predefined(self.cache)
@@ -56,7 +58,7 @@ class Library:
         return True
 
 
-    @use_cache(7)
+    @cacheit()
     def getTemplate(self, version=ADDON_VERSION):
         log('getTemplate')
         return (self.load(LIBRARYFLE_DEFAULT) or {})
@@ -94,7 +96,7 @@ class Library:
             if item.get('enabled',False): return item
             return None
         items = self.libraryItems.get('library',{}).get(type,[])
-        if enabled: items = PoolHelper().poolList(chkEnabled,items)
+        if enabled: items = self.pool.poolList(chkEnabled,items)
         return sorted(items, key=lambda k: k['name'])
         
 
@@ -142,34 +144,34 @@ class Library:
             else: 
                 setProperty('has.%s'%(type.replace(' ','_')),'false')
                 
-        PoolHelper().poolList(setSettingStates,types)
+        self.pool.poolList(setSettingStates,types)
         blackList = self.recommended.getBlackList()
         if len(blackList) > 0: setPropertyBool('has.BlackList',len(blackList) > 0)
         setSetting('Clear_BlackList','|'.join(blackList))
         return True
         
  
-    @use_cache(1)
+    @cacheit()
     def getNetworks(self):
         return self.jsonRPC.getTVInfo()[0]
         
         
-    @use_cache(1)
+    @cacheit()
     def getTVGenres(self):
         return self.jsonRPC.getTVInfo()[1]
  
  
-    @use_cache(1)
+    @cacheit()
     def getTVShows(self):
         return self.jsonRPC.getTVInfo()[2]
  
  
-    @use_cache(1)
+    @cacheit()
     def getMovieStudios(self):
         return self.jsonRPC.getMovieInfo()[0]
         
         
-    @use_cache(1)
+    @cacheit()
     def getMovieGenres(self):
         return self.jsonRPC.getMovieInfo()[1]
         
@@ -186,7 +188,7 @@ class Library:
  
     def getfillItems(self):
         log('getfillItems')
-        busy  = ProgressBGDialog(message='%s'%(LANGUAGE(30158)))
+        busy  = Dialog().progressBGDialog(message='%s'%(LANGUAGE(30158)))
         funcs = {LANGUAGE(30002):self.getNetworks,
                  LANGUAGE(30003):self.getTVShows,
                  LANGUAGE(30004):self.getTVGenres,
@@ -200,33 +202,33 @@ class Library:
                
         def parseMeta(data):
             type, busy = data
-            busy = ProgressBGDialog(((CHAN_TYPES.index(type))*100//len(CHAN_TYPES)), busy, '%s'%(LANGUAGE(30158)))
+            busy = Dialog().progressBGDialog(((CHAN_TYPES.index(type))*100//len(CHAN_TYPES)), busy, '%s'%(LANGUAGE(30158)))
             return type,funcs[type]()
-        return busy, dict(PoolHelper().poolList(parseMeta,CHAN_TYPES,busy))
+        return busy, dict(self.pool.poolList(parseMeta,CHAN_TYPES,busy))
     
         
     def fillLibraryItems(self):
         #parse kodi for items, convert to library item, parse for changed logo and vfs path. save to library.json
         busy, fillItems = self.getfillItems()
-        # busy = ProgressBGDialog(message='%s...'%(LANGUAGE(30160)))
+        # busy = Dialog().progressBGDialog(message='%s...'%(LANGUAGE(30160)))
         def setItem(data):
             type, busy = data
             prog = CHAN_TYPES.index(type)
             if self.myMonitor.waitForAbort(0.01):
-                busy = ProgressBGDialog(100, busy, '%s...'%(LANGUAGE(30158)))   
+                busy = Dialog().progressBGDialog(100, busy, '%s...'%(LANGUAGE(30158)))   
                 return None
                 
             items     = []
             fillItem  = fillItems.get(type,[])
             progress  = 99#(prog*100//len(CHAN_TYPES))
-            busy = ProgressBGDialog(progress, busy, '%s %s'%(LANGUAGE(30160),type))
+            busy = Dialog().progressBGDialog(progress, busy, '%s %s'%(LANGUAGE(30160),type))
             existing  = self.getLibraryItems(type, enabled=True)
             for idx, item in enumerate(fillItem):
                 if self.myMonitor.waitForAbort(0.01):
-                    busy = ProgressBGDialog(100, busy, '%s...'%(LANGUAGE(30158)))   
+                    busy = Dialog().progressBGDialog(100, busy, '%s...'%(LANGUAGE(30158)))   
                     return None
                     
-                busy = ProgressBGDialog(progress, busy, '%s %s %s'%(LANGUAGE(30159),type,(idx*100//len(fillItem)))+'%')
+                busy = Dialog().progressBGDialog(progress, busy, '%s %s %s'%(LANGUAGE(30159),type,(idx*100//len(fillItem)))+'%')
                 if isinstance(item,dict):
                     name = (item.get('name','') or item.get('label',''))
                     if not name: 
@@ -245,8 +247,8 @@ class Library:
                 log('fillLibraryItems, type = %s, tmpItem = %s'%(type,tmpItem))
             log('fillLibraryItems, type = %s, items = %s'%(type,len(items)))
             self.setLibraryItems(type,items) 
-        PoolHelper().poolList(setItem,CHAN_TYPES,busy)          
-        busy = ProgressBGDialog(100, busy, '%s...'%(LANGUAGE(30158)))   
+        self.pool.poolList(setItem,CHAN_TYPES,busy)          
+        busy = Dialog().progressBGDialog(100, busy, '%s...'%(LANGUAGE(30158)))   
         return self.save()
         
         
@@ -258,14 +260,14 @@ class Recommended:
     def __init__(self, cache=None, library=None):
         self.log('__init__')
         if cache is None:
-            self.cache = SimpleCache()
+            self.cache = Cache()
         else: 
             self.cache = cache
 
         if library is None: return
         self.library  = library
-        self.jsonRPC  = self.library.jsonRPC
-    
+        self.jsonRPC  = library.jsonRPC
+        self.pool     = library.pool
         self.recommendEnabled  = getSettingBool('Enable_Recommended')
 
 
@@ -319,7 +321,7 @@ class Recommended:
     def searchRecommendedAddons(self):
         blackList = self.getBlackList()
         addonList = list(filter(lambda k:k.get('addonid','') not in blackList, self.jsonRPC.getAddons()))
-        return (PoolHelper().poolList(self.searchRecommendedAddon, addonList))
+        return (self.pool.poolList(self.searchRecommendedAddon, addonList))
         
         
     def searchRecommendedAddon(self, addon):
@@ -331,9 +333,8 @@ class Recommended:
             if data:
                 self.log('searchRecommendedAddon, found addonid = %s, payload = %s'%(addonid,data))
                 cacheResponse = {addonid:{"id":addonid,"data":loadJSON(data),"meta":getPluginMeta(addonid)}}
-                self.cache.set(cacheName, dumpJSON(cacheResponse), checksum=len(dumpJSON(cacheResponse)), expiration=datetime.timedelta(days=getSettingInt('Max_Days')))
-                return cacheResponse
-        else: return loadJSON(cacheResponse)
+                return self.cache.set(cacheName, cacheResponse, life=datetime.timedelta(minutes=15))
+        return cacheResponse
 
 
     def findbyType(self, type='iptv'):
@@ -368,7 +369,7 @@ class Recommended:
         for item in recommendedAddons:
             addon = list(item.keys())[0]
             if not addon in ignoreList:
-                if not yesnoDialog('%s'%(LANGUAGE(30147)%(ADDON_NAME,item[addon]['meta'].get('name','')))):                   
+                if not Dialog().yesnoDialog('%s'%(LANGUAGE(30147)%(ADDON_NAME,item[addon]['meta'].get('name','')))):                   
                     self.addBlackList(addon)
                 else: 
                     self.addWhiteList(addon)

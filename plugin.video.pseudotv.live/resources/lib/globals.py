@@ -22,29 +22,18 @@ import os, sys, re, struct, shutil, traceback, threading
 import datetime, time, _strptime, base64, binascii, random, hashlib
 import json, codecs, collections, uuid
 
+from resources.lib.cache       import Cache, cacheit
+from resources.lib.kodi        import Dialog
+from resources.lib.settings    import Settings, Properties
+from resources.lib.concurrency import PoolHelper
 from kodi_six                  import xbmc, xbmcaddon, xbmcplugin, xbmcgui, xbmcvfs, py2_encode, py2_decode
-from itertools                 import repeat, cycle, chain, zip_longest
+from itertools                 import cycle, chain, zip_longest
 from six.moves                 import urllib
 from contextlib                import contextmanager
-from simplecache               import use_cache, SimpleCache
 from xml.dom.minidom           import parse, parseString, Document
 from xml.etree.ElementTree     import ElementTree, Element, SubElement, tostring, XMLParser
 from resources.lib.fileaccess  import FileAccess, FileLock
 from operator                  import itemgetter
-    
-try:
-    from multiprocessing       import cpu_count
-    from multiprocessing.pool  import ThreadPool 
-    ENABLE_POOL  = True
-    THREAD_CORES = cpu_count()
-except: ENABLE_POOL = False
-    
-try:
-    from multiprocessing import Process, Queue
-    Queue() # Queue doesn't raise importError on android, call directly.
-except:
-    from threading import Thread as Process
-    from queue     import Queue
 
 PY2 = sys.version_info[0] == 2
 PY3 = sys.version_info[0] == 3
@@ -62,7 +51,6 @@ ADDON_VERSION       = REAL_SETTINGS.getAddonInfo('version')
 ICON                = REAL_SETTINGS.getAddonInfo('icon')
 FANART              = REAL_SETTINGS.getAddonInfo('fanart')
 LANGUAGE            = REAL_SETTINGS.getLocalizedString
-
 MY_MONITOR          = xbmc.Monitor()
 MY_PLAYER           = xbmc.Player()
 
@@ -142,6 +130,70 @@ CHANNELBUG_CHECK_TIME            = 15.0 #seconds
 # Actions
 ACTION_PREVIOUS_MENU         = [9, 10, 92, 216, 247, 257, 275, 61467, 61448, 110]
 
+def getSettings(key,id=REAL_SETTINGS):
+    return Settings(id).getSettings(key)
+    
+def getSetting(key,id=REAL_SETTINGS):
+    return Settings(id).getSetting(key)
+
+def getSettingBool(key,id=REAL_SETTINGS):
+    return Settings(id).getSettingBool(key)
+    
+def getSettingInt(key,id=REAL_SETTINGS):
+    return Settings(id).getSettingInt(key)
+
+def getSettingNumber(key,id=REAL_SETTINGS):
+    return Settings(id).getSettingNumber(key)
+    
+def getSettingString(key,id=REAL_SETTINGS):
+    return Settings(id).getSettingString(key)
+       
+def openSettings(id=REAL_SETTINGS):     
+    return Settings(id).openSettings()
+        
+def setSettings(key,values,id=REAL_SETTINGS):
+    return Settings(id).setSettings(key,values)
+        
+def setSetting(key,values,id=REAL_SETTINGS):
+    return Settings(id).setSetting(key,values)
+
+def setSettingBool(key,value,id=REAL_SETTINGS):
+    return Settings(id).setSettingBool(key,value)
+    
+def setSettingInt(key,value,id=REAL_SETTINGS):
+    return Settings(id).setSettingInt(key,value)
+    
+def setSettingNumber(key,value,id=REAL_SETTINGS):
+    return Settings(id).setSettingNumber(key,value)
+    
+def setSettingString(key,value,id=REAL_SETTINGS):
+    return Settings(id).setSettingString(key,value)
+
+def clearProperties(key,id=10000):
+    return Properties(id).clearProperties(key) 
+    
+def clearProperty(key,id=10000):
+    return Properties(id).clearProperty(key) 
+ 
+def getProperties(key,id=10000):
+    return Properties(id).getProperties(key)
+     
+def getProperty(key,id=10000):
+    return Properties(id).getProperty(key)
+
+def getPropertyBool(key,id=10000):
+    return Properties(id).getPropertyBool(key)
+    
+def setProperties(key,values,id=10000):
+    return Properties(id).setProperties(key,values)
+
+def setProperty(key,value,id=10000):
+    return Properties(id).setProperty(key,value)
+
+def setPropertyBool(key,value,id=10000):
+    return Properties(id).setPropertyBool(key,value)
+
+
 USER_LOC         = (REAL_SETTINGS.getSetting('User_Folder') or SETTINGS_LOC)
 XMLTVFLE         = os.path.join(USER_LOC ,'%s.xml'%('pseudotv'))
 M3UFLE           = os.path.join(USER_LOC ,'%s.m3u'%('pseudotv'))
@@ -178,67 +230,11 @@ def log(msg, level=xbmc.LOGDEBUG):
     try: xbmc.log('%s-%s-%s'%(ADDON_ID,ADDON_VERSION,msg),level)
     except Exception as e: xbmc.log('log failed! %s'%(e),level)
 
-def getProperty(key, id=10000):
-    try: 
-        key = '%s.%s'%(ADDON_ID,key)
-        value = xbmcgui.Window(id).getProperty(key)
-        if value: log("globals: getProperty, key = " + key + ", value = " + value)
-        return value
-    except Exception as e: log("globals: getProperty, Failed! " + str(e), xbmc.LOGERROR)
-    return ''
-    
-def setProperty(key, value, id=10000):
-    key = '%s.%s'%(ADDON_ID,key)
-    if not isinstance(value, basestring): value = str(value)
-    log("globals: setProperty, key = " + key + ", value = " + value)
-    try: xbmcgui.Window(id).setProperty(key, value)
-    except Exception as e: log("globals: setProperty, Failed! " + str(e), xbmc.LOGERROR)
-    return True
-    
-def clearProperty(key, id=10000):
-    key = '%s.%s'%(ADDON_ID,key)
-    log("globals: clearProperty, key = %s"%(key))
-    xbmcgui.Window(id).clearProperty(key)
-
-def getPropertyBool(key):
-    return getProperty(key).title() == 'True'
-    
-def setPropertyBool(key, value):
-    return setProperty(key,str(value).title())
-
 def isLegacyPseudoTV(): # legacy setting to disable/enable support in third-party applications. 
     return getPropertyBool('PseudoTVRunning')
 
 def setLegacyPseudoTV(state):
     return setPropertyBool('PseudoTVRunning',state)
-
-def setSetting(key,value):
-    log('globals: setSetting, key = %s, value = %s'%(key,value))
-    return REAL_SETTINGS.setSetting(key,value)
-
-def getSetting(key, reload=True):
-    if reload: REAL_SETTINGS = xbmcaddon.Addon(id=ADDON_ID)
-    value = REAL_SETTINGS.getSetting(key)
-    log('globals: getSetting, key = %s, value = %s'%(key,value))
-    return value
-    
-def getSettingBool(key, reload=True):
-    if reload: REAL_SETTINGS = xbmcaddon.Addon(id=ADDON_ID)
-    try:
-        return REAL_SETTINGS.getSettingBool(key)
-    except:
-        return getSetting(key) == "true" 
-    
-def getSettingInt(key, reload=True):
-    if reload: REAL_SETTINGS = xbmcaddon.Addon(id=ADDON_ID)
-    try: 
-        return REAL_SETTINGS.getSettingInt(key)
-    except:
-        value = getSetting(key)
-        if value.isdecimal():
-            return float(value)
-        elif value.isdigit(): 
-            return int(value)
 
 def unquote(text):
     return urllib.parse.unquote(text)
@@ -277,117 +273,6 @@ def busy_dialog(escape=False):
         finally: xbmc.executebuiltin('Dialog.Close(busydialognocancel)')
     else: yield
 
-def initDirs():
-    dirs = [CACHE_LOC,LOGO_LOC,PLS_LOC,LOCK_LOC]
-    [FileAccess.makedirs(dir) for dir in dirs if not FileAccess.exists(dir)]
-    return True
-
-def notificationDialog(message, header=ADDON_NAME, sound=False, time=4000, icon=COLOR_LOGO):
-    log('globals: notificationDialog: ' + message)
-    try: xbmcgui.Dialog().notification(header, message, icon, time, sound=False)
-    except Exception as e:
-        log("globals: notificationDialog Failed! " + str(e), xbmc.LOGERROR)
-        xbmc.executebuiltin("Notification(%s, %s, %d, %s)" % (header, message, time, icon))
-    return True
-     
-def notificationProgress(message, header=ADDON_NAME, func=None, args=None, kwargs={}, time=4):
-    dia = ProgressBGDialog(message=message,header=header)
-    for i in range(time):
-        # if func: func(*args, **kwargs)
-        if MY_MONITOR.waitForAbort(1): break
-        dia = ProgressBGDialog((((i + 1) * 100)//time),control=dia,header=header)
-    return ProgressBGDialog(100,control=dia)
-    
-def okDialog(msg, heading=ADDON_NAME):
-    return xbmcgui.Dialog().ok(heading, msg)
-    
-def textviewer(msg, heading=ADDON_NAME, usemono=False):
-    return xbmcgui.Dialog().textviewer(heading, msg, usemono)
-    
-def yesnoDialog(message, heading=ADDON_NAME, nolabel='', yeslabel='', customlabel='', autoclose=0):
-    try:    
-        if customlabel:
-            return xbmcgui.Dialog().yesnocustom(heading, message, customlabel, nolabel, yeslabel, autoclose)
-        else: raise Exception()
-    except: return xbmcgui.Dialog().yesno(heading, message, nolabel, yeslabel, autoclose)
-    
-def browseDialog(type=0, heading=ADDON_NAME, default='', shares='', mask='', options=None, useThumbs=True, treatAsFolder=False, prompt=True, multi=False, monitor=False):
-    if prompt and not default:
-        if options is None:
-            options  = [{"label":"Video Playlists" , "label2":"Video Playlists"               , "default":"special://profile/playlists/video/" , "mask":'.xsp'     , "type":1, "multi":False},
-                        {"label":"Music Playlists" , "label2":"Music Playlists"               , "default":"special://profile/playlists/music/" , "mask":'.xsp'     , "type":1, "multi":False},
-                        {"label":"Video"           , "label2":"Video Sources"                 , "default":"library://video/"                   , "mask":VIDEO_EXTS , "type":0, "multi":False},
-                        {"label":"Music"           , "label2":"Music Sources"                 , "default":"library://music/"                   , "mask":MUSIC_EXTS , "type":0, "multi":False},
-                        {"label":"Pictures"        , "label2":"Picture Sources"               , "default":""                                   , "mask":IMAGE_EXTS , "type":0, "multi":False},
-                        {"label":"Files"           , "label2":"File Sources"                  , "default":""                                   , "mask":""         , "type":0, "multi":False},
-                        {"label":"Local"           , "label2":"Local Drives"                  , "default":""                                   , "mask":""         , "type":0, "multi":False},
-                        {"label":"Network"         , "label2":"Local Drives and Network Share", "default":""                                   , "mask":""         , "type":0, "multi":False},
-                        {"label":"Resources"       , "label2":"Resource Plugins"              , "default":"resource://"                        , "mask":""         , "type":0, "multi":False}]
-        listitems = [buildMenuListItem(option['label'],option['label2'],iconImage=COLOR_LOGO) for option in options]
-
-        select    = selectDialog(listitems, LANGUAGE(30116), multi=False)
-        if select is not None:
-            shares    = options[select]['label'].lower().replace("network","")
-            mask      = options[select]['mask']
-            type      = options[select]['type']
-            multi     = options[select]['multi']
-            default   = options[select]['default']
-    log('globals: browseDialog, type = %s, heading= %s, shares= %s, mask= %s, useThumbs= %s, treatAsFolder= %s, default= %s'%(type, heading, shares, mask, useThumbs, treatAsFolder, default))
-    if monitor: toggleCHKInfo(True)
-    if multi == True:
-        # https://codedocs.xyz/xbmc/xbmc/group__python___dialog.html#ga856f475ecd92b1afa37357deabe4b9e4
-        # type integer - the type of browse dialog.
-        # 1	ShowAndGetFile
-        # 2	ShowAndGetImage
-        retval = xbmcgui.Dialog().browseMultiple(type, heading, shares, mask, useThumbs, treatAsFolder, default)
-    else:
-        # https://codedocs.xyz/xbmc/xbmc/group__python___dialog.html#gafa1e339e5a98ae4ea4e3d3bb3e1d028c
-        # type integer - the type of browse dialog.
-        # 0	ShowAndGetDirectory
-        # 1	ShowAndGetFile
-        # 2	ShowAndGetImage
-        # 3	ShowAndGetWriteableDirectory
-        retval = xbmcgui.Dialog().browseSingle(type, heading, shares, mask, useThumbs, treatAsFolder, default)
-    if monitor: toggleCHKInfo(False)
-    if retval:
-        if prompt and retval == default: return None
-        return retval
-    return None
-      
-def inputDialog(message, default='', key=xbmcgui.INPUT_ALPHANUM, opt=0, close=0):
-    # Types:
-    # - xbmcgui.INPUT_ALPHANUM (standard keyboard)
-    # - xbmcgui.INPUT_NUMERIC (format: #)
-    # - xbmcgui.INPUT_DATE (format: DD/MM/YYYY)
-    # - xbmcgui.INPUT_TIME (format: HH:MM)
-    # - xbmcgui.INPUT_IPADDRESS (format: #.#.#.#)
-    # - xbmcgui.INPUT_PASSWORD (return md5 hash of input, input is masked)
-    retval = xbmcgui.Dialog().input(message, default, key, opt, close)
-    if retval: return retval
-    return None
-    
-def selectDialog(list, header=ADDON_NAME, preselect=None, useDetails=True, autoclose=0, multi=True):
-    if multi == True:
-        if preselect is None: preselect = []
-        select = xbmcgui.Dialog().multiselect(header, list, autoclose, preselect, useDetails)
-    else:
-        if preselect is None:  preselect = -1
-        select = xbmcgui.Dialog().select(header, list, autoclose, preselect, useDetails)
-    if select is not None: return select
-    return None
-
-def ProgressBGDialog(percent=0, control=None, message='', header=ADDON_NAME):
-    if (getSettingBool('Silent_OnPlayback') & isOverlay() & xbmc.getCondVisibility('Player.Playing')):
-        if control is None: return
-        else: return control.close()
-    if control is None and percent == 0:
-        control = xbmcgui.DialogProgressBG()
-        control.create(header, message)
-    elif control:
-        if percent == 100 or control.isFinished(): return control.close()
-        else: control.update(percent, header, message)
-    return control
-
 def getIdleTime():
     try: return (int(xbmc.getGlobalIdleTime()) or 0)
     except: return 0 #Kodi raises error after sleep.
@@ -408,10 +293,16 @@ def setBusy(state):
     return setProperty("BUSY.RUNNING",str(state))
     
 def isBusy():
-    return (getProperty("BUSY.RUNNING") == "True")
+    return getProperty("BUSY.RUNNING") == "True"
 
 def isOverlay():
     return getPropertyBool('OVERLAY')
+
+def isPendingChange():
+    return getProperty("pendingChange") == "True"
+
+def setPendingChange(state):
+    setPropertyBool('pendingChange',state)
 
 def padLST(lst, targetLen):
     if len(lst) == 0: return lst
@@ -429,20 +320,32 @@ def chkVersion(cleanStart=False):
     
 def showChangelog():
     changelog = xbmcvfs.File(CHANGELOG_FLE).read().replace('-Added','[B][COLOR=green]-Added:[/COLOR][/B]').replace('-Important','[B][COLOR=red]-Important:[/COLOR][/B]').replace('-Notice','[B][COLOR=orange]-Notice:[/COLOR][/B]').replace('-Warning','[B][COLOR=red]-Warning:[/COLOR][/B]').replace('-Removed','[B][COLOR=red]-Removed:[/COLOR][/B]').replace('-Fixed','[B][COLOR=orange]-Fixed:[/COLOR][/B]').replace('-Improved','[B][COLOR=yellow]-Improved:[/COLOR][/B]').replace('-Tweaked','[B][COLOR=yellow]-Tweaked:[/COLOR][/B]').replace('-Changed','[B][COLOR=yellow]-Changed:[/COLOR][/B]')
-    return textviewer(changelog,heading=(LANGUAGE(30134)%(ADDON_NAME,ADDON_VERSION)),usemono=True)
+    return Dialog().textviewer(changelog,heading=(LANGUAGE(30134)%(ADDON_NAME,ADDON_VERSION)),usemono=True)
 
-def dumpJSON(dict1, idnt=None, sortkey=True):
-    if not dict1: return ''
-    elif isinstance(dict1, basestring): return dict1
-    return (json.dumps(dict1, indent=idnt, sort_keys=sortkey))
+def dumpJSON(item, idnt=None, sortkey=True):
+    try: 
+        if not item:
+            return ''
+        elif hasattr(item, 'read'):
+            return json.dump(item, indent=idnt, sort_keys=sortkey)
+        elif not isinstance(item,basestring):
+            return json.dumps(item, indent=idnt, sort_keys=sortkey)
+        elif isinstance(item,basestring):
+            return item
+    except Exception as e: log("globals: dumpJSON failed! %s\n%s"%(e,item), xbmc.LOGERROR)
+    return ''
     
 def loadJSON(item):
-    if isinstance(item,dict):
-        log("globals: loadJSON item already mutable")
-        return item
-    elif isinstance(item,basestring):
-        try: return json.loads(item, strict=False)
-        except Exception as e: log("globals: loadJSON failed! %s\n%s"%(e,item), xbmc.LOGERROR)
+    try: 
+        if not item:
+            return {}
+        elif hasattr(item, 'read'):
+            return json.load(item)
+        elif isinstance(item,basestring):
+            return json.loads(item)
+        elif isinstance(item,dict):
+            return item
+    except Exception as e: log("globals: loadJSON failed! %s\n%s"%(e,item), xbmc.LOGERROR)
     return {}
     
 def sendJSON(command):
@@ -492,12 +395,12 @@ def brutePVR(override=False):
     if (xbmc.getCondVisibility("Pvr.IsPlayingTv") or xbmc.getCondVisibility("Player.HasMedia")): 
         return
     elif not override:
-        if not yesnoDialog('%s ?'%(LANGUAGE(30065)%(getPluginMeta(PVR_CLIENT).get('name','')))): return
+        if not Dialog().yesnoDialog('%s ?'%(LANGUAGE(30065)%(getPluginMeta(PVR_CLIENT).get('name','')))): return
     togglePVR('false')
     xbmc.sleep(2000)
     togglePVR('true')
     if override: return True
-    return notificationDialog(LANGUAGE(30053))
+    return Dialog().notificationDialog(LANGUAGE(30053))
 
 def getPVR(id=PVR_CLIENT):
     try: return xbmcaddon.Addon(id)
@@ -524,15 +427,15 @@ def chkPVR(id=PVR_CLIENT, values=PVR_SETTINGS):
 def configurePVR(id=PVR_CLIENT,values=PVR_SETTINGS,override=False):
     log('globals: configurePVR')
     if not override:
-        if not yesnoDialog('%s ?'%(LANGUAGE(30012)%(getPluginMeta(id).get('name',''),ADDON_NAME,))): return
+        if not Dialog().yesnoDialog('%s ?'%(LANGUAGE(30012)%(getPluginMeta(id).get('name',''),ADDON_NAME,))): return
     try:
         addon = getPVR(id)
         if addon is None: return False
         for setting, value in values.items(): 
             addon.setSetting(setting, value)
-    except: return notificationDialog(LANGUAGE(30049)%(id))
+    except: return Dialog().notificationDialog(LANGUAGE(30049)%(id))
     if override: return True
-    return notificationDialog(LANGUAGE(30053))
+    return Dialog().notificationDialog(LANGUAGE(30053))
 
 def refreshMGR():
     if getPVR(PVR_MANAGER):
@@ -855,12 +758,12 @@ def getInfoMonitor():
     return getProperty('monitor.montiorList').split('|')
 
 def toggleCHKInfo(state):
-    setProperty('chkInfo',str(state))
+    setPropertyBool('chkInfo',state)
     if state: clearProperty('monitor.montiorList')
     else: clearProperty('chkInfo')
     
 def isCHKInfo():
-    return getProperty('chkInfo') == "True"
+    return getPropertyBool('chkInfo') == "True"
         
 def hasSubtitle():
     return xbmc.getCondVisibility('VideoPlayer.HasSubtitles')
@@ -942,36 +845,3 @@ def cleanChannelSuffix(name, type):
     elif type == LANGUAGE(30097): name = name.split(' %s'%LANGUAGE(30157))[0]#Music
     elif type == LANGUAGE(30005): name = name.split(' %s'%LANGUAGE(30156))[0]#Movie
     return name
-
-class PoolHelper:
-    def __init__(self):
-        if ENABLE_POOL: 
-            self.pool = ThreadPool(THREAD_CORES)
-            log("PoolHelper: CPU CORES = " + str(THREAD_CORES))
-        else: log("PoolHelper: ThreadPool Disabled")
-        
-
-    def runSelf(self, func):
-        return func()
-        
-        
-    def poolList(self, method, items=None, args=None, chunk=1):
-        log("PoolHelper: poolList")
-        results = []
-        if ENABLE_POOL:
-            if items is None and args is None: 
-                results = self.pool.map(self.runSelf, method, chunksize=chunk)
-            elif args is not None: 
-                results = self.pool.map(method, zip(items,repeat(args)), chunksize=chunk)
-            elif items: 
-                results = self.pool.map(method, items, chunksize=chunk)
-            self.pool.close()   
-            self.pool.join()
-        else:
-            if items is None and args is None: 
-                results = [self.runSelf(func) for func in method]
-            elif args is not None: 
-                results = [method((item, args)) for item in items]
-            elif items: 
-                results = [method(item) for item in items]
-        return list(filter(None, results))

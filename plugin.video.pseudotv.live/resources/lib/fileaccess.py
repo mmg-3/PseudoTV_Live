@@ -100,13 +100,22 @@ class FileAccess:
 
     @staticmethod
     def rename(path, newpath):       
-        log("FileAccess: rename " + path + " to " + newpath)
+        log("FileAccess: rename %s to %s"%(path,newpath))
+        if not FileAccess.exists(path):
+            return False
+        
         try:
             if xbmcvfs.rename(path, newpath):
                 return True
         except Exception as e: 
             log("FileAccess: rename, Failed! %s"%(e), xbmc.LOGERROR)
 
+        try:
+            if FileAccess.move(path, newpath):
+                return True
+        except Exception as e: 
+            log("FileAccess: move, Failed! %s"%(e), xbmc.LOGERROR)
+            
         if path[0:6].lower() == 'smb://' or newpath[0:6].lower() == 'smb://':
             if os.name.lower() == 'nt':
                 log("FileAccess: Modifying name")
@@ -115,7 +124,6 @@ class FileAccess:
 
                 if newpath[0:6].lower() == 'smb://':
                     newpath = '\\\\' + newpath[6:]
-        
         try:
             log("FileAccess: os.rename")
             os.rename(xbmcvfs.translatePath(path), xbmcvfs.translatePath(newpath))
@@ -281,7 +289,8 @@ class FileLock:
             if curval > -1:
                 self.releaseLockFile()
                 self.grabSemaphore.release()
-                if globals.MY_MONITOR.waitForAbort(1): break
+                if globals.MY_MONITOR.waitForAbort(1): 
+                    break
 
             self.grabSemaphore.acquire()
             if self.grabLockFile() == False:
@@ -338,8 +347,9 @@ class FileLock:
 
         if existing == False:
             self.lockedList.append(filename)
-
-        self.grabSemaphore.release()
+            
+        try: self.grabSemaphore.release()
+        except: pass
         return True
 
 
@@ -405,7 +415,6 @@ class FileLock:
 
     def findLockEntry(self, lines, filename):
         log("FileLock: findLockEntry")
-
         # Read the file
         for line in lines:
             # Format is 'random value,filename'
@@ -426,7 +435,6 @@ class FileLock:
             if flenme == filename:
                 log("FileLock: entry exists, val is " + str(setval))
                 return setval
-
         return -1
 
 
@@ -484,7 +492,7 @@ class FileLock:
 
 
     def isFileLocked(self, filename, block = False):
-        log("FileLock: isFileLocked " + filename)
+        log("FileLock: isFileLocked %s"%filename)
         filename = filename.lower()
         self.grabSemaphore.acquire()
 

@@ -541,7 +541,7 @@ msgid "Settings"
 msgstr ""
 
 msgctxt "#30131"
-msgid "More Info"
+msgid "More Info..."
 msgstr ""
 
 msgctxt "#30132"

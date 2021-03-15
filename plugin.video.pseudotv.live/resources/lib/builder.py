@@ -27,7 +27,7 @@ class Builder:
     def __init__(self, cache=None):
         self.log('__init__')
         if cache is None:
-            self.cache = SimpleCache()
+            self.cache = Cache()
         else: 
             self.cache = cache
             
@@ -53,7 +53,7 @@ class Builder:
                                  "trailers"   :{"min":getSettingInt('Fillers_Trailers')   ,"max":4,"enabled":getSettingInt('Fillers_Trailers') > 0   ,"paths":(getSetting('Resource_Trailers')).split(',')}}#todo check adv. rules get settings
                                 
         self.rules            = RulesList()
-        self.writer           = Writer(self.cache, self)
+        self.writer           = Writer(cache=self.cache, builder=self)
         self.channels         = self.writer.channels
         self.jsonRPC          = JSONRPC(self.cache, self)
         self.resources        = self.jsonRPC.resources
@@ -96,19 +96,19 @@ class Builder:
         self.log('buildService, channels = %s'%(len(channels)))
         
         if not channels:
-            notificationDialog(LANGUAGE(30056))
+            Dialog().notificationDialog(LANGUAGE(30056))
             return None
 
         if not isLegacyPseudoTV(): # legacy setting to disable/enable support in third-party applications. 
             setLegacyPseudoTV(True)
             
-        self.dialog       = ProgressBGDialog()
+        self.dialog       = Dialog().progressBGDialog()
         self.channelCount = len(channels)
         self.ruleList     = self.rules.loadRules(channels)
         
         for idx, channel in enumerate(channels):
             if self.myMonitor.waitForAbort(0.01):
-                self.dialog = ProgressBGDialog(100, self.dialog, message=LANGUAGE(30053))
+                self.dialog = Dialog().progressBGDialog(100, self.dialog, message=LANGUAGE(30053))
                 return False
                 
             channel       = self.runActions(RULES_ACTION_START, channel, channel)
@@ -126,9 +126,9 @@ class Builder:
                 self.writer.removeChannelLineup(channel)
                 
         if not self.writer.save(): 
-            notificationDialog(LANGUAGE(30001))
+            Dialog().notificationDialog(LANGUAGE(30001))
             
-        self.dialog = ProgressBGDialog(100, self.dialog, message=LANGUAGE(30053))
+        self.dialog = Dialog().progressBGDialog(100, self.dialog, message=LANGUAGE(30053))
         self.log('buildService, finished')
         
         if isLegacyPseudoTV() and not self.myPlayer.isPlaying():
@@ -336,7 +336,7 @@ class Builder:
                     item['plot']  = (item.get("plot","") or item.get("plotoutline","") or item.get("description","") or LANGUAGE(30161))
             
                     if self.dialog is not None:
-                        self.dialog = ProgressBGDialog(self.progress, self.dialog, message='%s %s'%(self.chanName,((len(fileList)*100)//PAGE_LIMIT))+'%')
+                        self.dialog = Dialog().progressBGDialog(self.progress, self.dialog, message='%s %s'%(self.chanName,((len(fileList)*100)//PAGE_LIMIT))+'%')
 
                     item.get('art',{})['icon']   = channel['logo']
                     # item.get('art',{})['thumb']  = getThumb(item) #unify artwork                    # item.get('art',{})['fanart'] = getThumb(item) #unify artwork

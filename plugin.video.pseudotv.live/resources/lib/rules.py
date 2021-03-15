@@ -251,19 +251,19 @@ class BaseRule:
 
 
     def onActionTextBox(self, optionindex):
-        value = inputDialog(self.name, default=self.optionValues[optionindex], key=xbmcgui.INPUT_ALPHANUM)
+        value = Dialog().inputDialog(self.name, default=self.optionValues[optionindex], key=xbmcgui.INPUT_ALPHANUM)
         if value: self.optionValues[optionindex] = value
         
 
     def onActionDateBox(self, optionindex):
         log("onActionDateBox")
-        info =  inputDialog(self.optionLabels[optionindex], default=self.optionValues[optionindex], key=xbmcgui.INPUT_NUMERIC)
+        info =  Dialog().inputDialog(self.optionLabels[optionindex], default=self.optionValues[optionindex], key=xbmcgui.INPUT_NUMERIC)
         if info != None: self.optionValues[optionindex] = info
 
 
     def onActionTimeBox(self, optionindex):
         log("onActionTimeBox")
-        info = inputDialog(self.optionLabels[optionindex], default=self.optionValues[optionindex], key=xbmcgui.INPUT_NUMERIC)
+        info = Dialog().inputDialog(self.optionLabels[optionindex], default=self.optionValues[optionindex], key=xbmcgui.INPUT_NUMERIC)
         if info != None:
             if info[0] == ' ': info = info[1:]
             if len(info) == 4: info = "0" + info
@@ -275,13 +275,13 @@ class BaseRule:
         if psel < 0:
             psel = [idx for idx, item in enumerate(self.selectBoxOptions[optionindex]) if item == self.optionValues[optionindex]]
             if not multi: psel = (psel[0] or -1)
-        select = selectDialog(titleLabels(self.selectBoxOptions[optionindex]), header, preselect=psel, useDetails=False, multi=multi)
+        select = Dialog().selectDialog(titleLabels(self.selectBoxOptions[optionindex]), header, preselect=psel, useDetails=False, multi=multi)
         if select is not None: self.optionValues[optionindex] = self.selectBoxOptions[optionindex][select]
                 
           
     def onActionBrowse(self, optionindex, header=ADDON_NAME, multi=False, type=0, shares='', mask='', useThumbs=True, treatAsFolder=False, default='', prompt=False):
         log("onActionBrowse")
-        info = browseDialog(yype, header, default, shares, mask, None, useThumbs, treatAsFolder, prompt, multi, monitor=False)
+        info = Dialog().browseDialog(yype, header, default, shares, mask, None, useThumbs, treatAsFolder, prompt, multi, monitor=False)
         if info is not None: self.optionValues[optionindex] = info 
                      
                 
@@ -302,12 +302,12 @@ class BaseRule:
 
     def onActionDaysofWeekBox(self, optionindex):
         log("onActionDaysofWeekBox")
-        value = inputDialog(self.name, default=self.optionValues[optionindex], key=xbmcgui.INPUT_ALPHANUM)
+        value = Dialog().inputDialog(self.name, default=self.optionValues[optionindex], key=xbmcgui.INPUT_ALPHANUM)
         if value: self.optionValues[optionindex] = value.upper()
 
 
     def onActionDigitBox(self, optionindex):
-        self.optionValues[optionindex] = inputDialog(self.optionLabels[optionindex], default=self.optionValues[optionindex], key=xbmcgui.INPUT_NUMERIC)
+        self.optionValues[optionindex] = Dialog().inputDialog(self.optionLabels[optionindex], default=self.optionValues[optionindex], key=xbmcgui.INPUT_NUMERIC)
 
 
 class ShowChannelBug(BaseRule):

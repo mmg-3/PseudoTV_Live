@@ -17,8 +17,7 @@ Create rich, in-depth channels with the added feature to import existing M3U/XML
 [![GitHub issues](https://img.shields.io/github/issues/PseudoTV/PseudoTV_Live.svg?style=flat-square)](https://github.com/PseudoTV/PseudoTV_Live/issues)  
 [![Kodi URL](https://img.shields.io/badge/Supports-Kodi%2019-blue.svg?style=flat-square)](https://kodi.tv/download)
 [![Kodi Donate](https://img.shields.io/badge/Donate-Kodi-blue.svg?style=flat-square)](https://kodi.tv/contribute/donate)
-[![Paypal Donate](https://img.shields.io/badge/Donate-Lunatixz-blue.svg?style=flat-square)](https://paypal.me/Lunatixz)
-[![Buy Me Coffee](https://img.shields.io/badge/Coffee-Lunatixz-blue.svg?style=flat-square)](https://www.buymeacoffee.com/Lunatixz)
+[![Lunatixz Donate](https://img.shields.io/badge/Coffee-Lunatixz-blue.svg?style=flat-square)](https://www.buymeacoffee.com/Lunatixz)
 [![Twitter URL](https://img.shields.io/twitter/follow/PseudoTV_Live.svg?color=blue&label=%40PseudoTV_Live&style=flat-square)](https://twitter.com/PseudoTV_Live) 
 
 

@@ -24,7 +24,7 @@ class Predefined:
     def __init__(self, cache=None):
         self.log('__init__')
         if cache is None:
-            self.cache = SimpleCache()
+            self.cache = Cache()
         else: 
             self.cache = cache
             

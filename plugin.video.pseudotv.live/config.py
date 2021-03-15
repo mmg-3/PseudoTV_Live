@@ -26,7 +26,7 @@ class Config:
         self.log('__init__, sysARG = ' + str(sysARG))
         self.sysARG    = sysARG
         if cache is None:
-            self.cache = SimpleCache()
+            self.cache = Cache()
         else: 
             self.cache = cache
 
@@ -34,11 +34,12 @@ class Config:
             from resources.lib.jsonrpc import JSONRPC
             from resources.lib.parser  import Writer
             self.jsonRPC     = JSONRPC(self.cache)
-            self.writer      = Writer(self.cache)
+            self.writer      = Writer(cache=self.cache)
         else:
             self.jsonRPC     = service.jsonRPC
             self.writer      = service.writer
             
+        self.pool            = self.writer.pool
         self.library         = Library(self.cache, self.jsonRPC)
         self.recommended     = self.library.recommended
         
@@ -55,14 +56,14 @@ class Config:
     def autoTune(self):
         status = False
         if getPropertyBool('autotuned'): return False
-        if yesnoDialog(LANGUAGE(30132)%(ADDON_NAME)):
-            busy  = ProgressBGDialog(message='%s...'%(LANGUAGE(30102)))
+        if Dialog().yesnoDialog(LANGUAGE(30132)%(ADDON_NAME)):
+            busy  = Dialog().progressBGDialog(message='%s...'%(LANGUAGE(30102)))
             types = list(filter(lambda k:k != LANGUAGE(30033), CHAN_TYPES)) #exclude Imports from autotuning.
             for idx, type in enumerate(types):
                 self.log('autoTune, type = %s'%(type))
-                busy = ProgressBGDialog((idx*100//len(types)), busy, '%s %s'%(LANGUAGE(30102),type))
+                busy = Dialog().progressBGDialog((idx*100//len(types)), busy, '%s %s'%(LANGUAGE(30102),type))
                 self.selectPredefined(type,autoTune=AUTOTUNE_LIMIT)
-            ProgressBGDialog(100, busy, '%s...'%(LANGUAGE(30102)))
+            Dialog().progressBGDialog(100, busy, '%s...'%(LANGUAGE(30102)))
             status = True
         setPropertyBool('autotuned',True)
         return status
@@ -76,15 +77,15 @@ class Config:
             if not items: 
                 if autoTune is None:
                     self.library.clearLibraryItems(type) #clear stale meta type
-                    notificationDialog(LANGUAGE(30103)%(type))
+                    Dialog().notificationDialog(LANGUAGE(30103)%(type))
                 return False
                 
             pitems    = self.library.getLibraryItems(type,enabled=True) # existing predefined
-            listItems = (PoolHelper().poolList(self.library.buildLibraryListitem,items,type))
+            listItems = (self.pool.poolList(self.library.buildLibraryListitem,items,type))
             pselect   = findItemsIn(listItems,pitems,val_key='name')
             
         if autoTune is None:
-            select = selectDialog(listItems,'Select %s'%(type),preselect=pselect)
+            select = Dialog().selectDialog(listItems,'Select %s'%(type),preselect=pselect)
         else:
             if autoTune > len(items): autoTune = len(items)
             select = random.sample(list(set(range(0,len(items)))),autoTune)
@@ -98,6 +99,7 @@ class Config:
 
 
     def recoverPredefined(self): 
+        self.log('recoverPredefined')
         # #todo if no library enabled, chk channels.json for predefined. prompt to recover and reenable in library.json
         return True
         # predefined   = self.channels.getPredefinedChannels()
@@ -108,6 +110,8 @@ class Config:
        
 
     def buildLibraryItems(self):
+        # if isPendingChange(): return
+        self.log('buildLibraryItems')
         funcs = [self.recoverPredefined,
                  self.library.fillLibraryItems,
                  self.library.chkLibraryItems]
@@ -135,42 +139,42 @@ class Config:
         
     def clearPredefined(self):
         self.log('clearPredefined')
-        if isBusy(): return notificationDialog(LANGUAGE(30029))
+        if isBusy(): return Dialog().notificationDialog(LANGUAGE(30029))
         with busy_dialog():
-            if not yesnoDialog('%s?'%(LANGUAGE(30077))): return
+            if not Dialog().yesnoDialog('%s?'%(LANGUAGE(30077))): return
             setBusy(True)
             if self.library.clearLibraryItems():
                 # self.buildPredefinedChannels()
                 setPropertyBool('pendingChange',True)
                 setPropertyBool('autotuned',False)
                 setBusy(False)
-                return notificationDialog(LANGUAGE(30053))
+                return Dialog().notificationDialog(LANGUAGE(30053))
         return False
         
 
     def clearUserChannels(self):
         self.log('clearUserChannels')
-        if isBusy(): return notificationDialog(LANGUAGE(30029))
+        if isBusy(): return Dialog().notificationDialog(LANGUAGE(30029))
         with busy():
-            if not yesnoDialog('%s?'%(LANGUAGE(30093))): return
+            if not Dialog().yesnoDialog('%s?'%(LANGUAGE(30093))): return
             if self.writer.clearChannels():
                 setPropertyBool('pendingChange',True)
                 setPropertyBool('autotuned',False)
-                return notificationDialog(LANGUAGE(30053))
+                return Dialog().notificationDialog(LANGUAGE(30053))
 
 
     def clearBlackList(self):
         self.log('clearBlackList') 
-        if not yesnoDialog('%s?'%(LANGUAGE(30154))): return
+        if not Dialog().yesnoDialog('%s?'%(LANGUAGE(30154))): return
         return self.recommended.clearBlackList()
         
 
     def userGroups(self):
         self.log('userGroups')
-        retval = inputDialog(LANGUAGE(30076), default=getSetting('User_Groups'))
+        retval = Dialog().inputDialog(LANGUAGE(30076), default=getSetting('User_Groups'))
         if not retval: return
         setSetting('User_Groups',retval)
-        notificationDialog(LANGUAGE(30053))
+        Dialog().notificationDialog(LANGUAGE(30053))
 
 
     def clearImport(self):
@@ -180,7 +184,7 @@ class Config:
             setSetting('Import_XMLTV','')
             setSetting('Import_SLUG' ,'')
             setSetting('User_Import' ,'false')
-        return notificationDialog(LANGUAGE(30053))
+        return Dialog().notificationDialog(LANGUAGE(30053))
         
 
     def openEditor(self, file='newsmartplaylist://%s/', media='video'):
@@ -216,14 +220,14 @@ class Config:
             addons = getSetting(param).split(',')
             for addon in addons: found.append(installAddon(addon))
         if True in found: return True
-        return notificationDialog(LANGUAGE(30192))
+        return Dialog().notificationDialog(LANGUAGE(30192))
         
     
     def run(self): 
         param = self.sysARG[1]
         self.log('run, param = %s'%(param))
         if isBusy():
-            notificationDialog(LANGUAGE(30029)%(ADDON_NAME))
+            Dialog().notificationDialog(LANGUAGE(30029)%(ADDON_NAME))
             return REAL_SETTINGS.openSettings()
             
         if param == None: pass #opensettings                    
