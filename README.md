@@ -20,7 +20,6 @@ Create rich, in-depth channels with the added feature to import existing M3U/XML
 [![Lunatixz Donate](https://img.shields.io/badge/Coffee-Lunatixz-blue.svg?style=flat-square)](https://www.buymeacoffee.com/Lunatixz)
 [![Twitter URL](https://img.shields.io/twitter/follow/PseudoTV_Live.svg?color=blue&label=%40PseudoTV_Live&style=flat-square)](https://twitter.com/PseudoTV_Live) 
 
-------------
 
 #Settings:
 
